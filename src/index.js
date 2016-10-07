@@ -5,7 +5,7 @@ import fs from 'fs'
 import path from 'path'
 import http from 'http'
 
-let cookie = ''
+let cookie = '_vid=C697B0676090000119B31E19FE909DE0; _ref=57f72e6a2a474; _cpmuid=1069473622; _user=1b0fa3c45d5dd63683573089e1b9d63e_2583910_1475817079; _uid=2583910; _email=merrychristmas_2002%40hotmail.com; _laid=0; _kx=MjU4MzkxMDpsZGdzYnIyNzc3cjQ6dm41eWZ5eXk5MWo0ZHZocWJzaXo2eW8wa3J6ZXE0cHZicGMw; _sso=2583910; SERVERID=_srv220-42_; onlinenum=c%3A0; wpresence=Fl4Rn7CSgV2JrUb8vyBj11CpGxbDf1VoV_dUIA.ZGZ0MjU4MzkxMA'
 
 const albumListUrl = 'http://www.kaixin001.com/photo/albumlist.php'
 const domainName="http://www.kaixin001.com"
@@ -97,7 +97,7 @@ class KaixinCrawler {
 	}
 
 	handleAlbum(album) {
-		//console.log(album.name)
+		console.log(album.name)
 		this.get(album.url).then(res => {
 			const pageUrls=this.parseAlbumSubPageUrls(res.text)
 			for(let pageUrl of pageUrls){
@@ -142,13 +142,13 @@ class KaixinCrawler {
 		}
 
 		const filePath=`${rootPhotoDir}/${albumName}/${photoName}.jpg`
-		let file=fs.createWriteStream(filePath);
 
 		if(!fs.existsSync(filePath)){
+			let file=fs.createWriteStream(filePath);
 			this.get(photoUrl).pipe(file)
 			console.log(`${filePath} is downloaded.`)
 		}else{
-			console.log(`${filePath} already exists.`)
+			//console.log(`${filePath} already exists.`)
 		}
 	}
 
