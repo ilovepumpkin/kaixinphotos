@@ -34,6 +34,10 @@ class KaixinCrawler {
 	}
 
 	start() {
+		console.log("deleting damaged files ...");
+		this.cleanDamagedFiles(rootPhotoDir)
+
+		console.log("fetching photos...");
 		this.get(albumListUrl)
 		.then(
 			res => {
@@ -149,15 +153,35 @@ class KaixinCrawler {
 
 		if(!fs.existsSync(filePath)){
 			let file=fs.createWriteStream(filePath);
-			this.get(photoUrl).pipe(file)
+			this.reqGet(photoUrl).pipe(file)
 			console.log(`${filePath} is downloaded.`)
-		}else{
-			//console.log(`${filePath} already exists.`)
 		}
+		
 	}
 
 	get(url) {
+		return this.reqGet(url).then(res=>{return res},err=>{console.error(err)})
+	}
+
+	reqGet(url){
 		return req.get(url).set('Cookie', this.cookie)
+	}
+
+	cleanDamagedFiles(parentPath){
+		let files=fs.readdirSync(parentPath);
+		for(let file of files){
+			let filePath=path.join(parentPath,file)
+			const stat=fs.statSync(filePath);
+			if(stat.isDirectory()){
+				this.cleanDamagedFiles(filePath)				
+			}else{
+				if(fs.statSync(filePath).size<1000){
+					console.log(`${filePath}: ${stat.size} - deleted`);
+					fs.unlinkSync(filePath);
+				}	
+			}
+		}
+
 	}
 
 }
