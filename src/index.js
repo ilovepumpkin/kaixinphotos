@@ -116,7 +116,7 @@ class KaixinCrawler {
 			let $ = cheerio.load(res.text)
 			$('div[class=initimgName]').each((idx, elem) => {
 				const nameLink=$(elem).children()
-				const photoName=nameLink.text()
+				const photoName=nameLink.attr('title')
 				const photoPageUrl=domainName+nameLink.attr('href')
 
 
