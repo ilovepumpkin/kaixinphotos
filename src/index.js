@@ -3,9 +3,6 @@ import req from 'superagent'
 import cheerio from 'cheerio'
 import fs from 'fs'
 import path from 'path'
-import http from 'http'
-
-let cookie = ''
 
 const albumListUrl = 'http://www.kaixin001.com/photo/albumlist.php'
 const domainName="http://www.kaixin001.com"
@@ -27,7 +24,14 @@ class Photo{
 
 class KaixinCrawler {
 
-	constructor() {}
+	constructor() {
+		this.cookie=this.readCookie()
+		console.log(this.cookie);
+	}
+
+	readCookie(){
+		return fs.readFileSync('cookie',{encoding:'utf8',flag:'r'});
+	}
 
 	start() {
 		this.get(albumListUrl)
@@ -153,7 +157,7 @@ class KaixinCrawler {
 	}
 
 	get(url) {
-		return req.get(url).set('Cookie', cookie)
+		return req.get(url).set('Cookie', this.cookie)
 	}
 
 }
