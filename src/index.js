@@ -107,7 +107,10 @@ class KaixinCrawler {
 	handleAlbum(album) {
 		console.log(album.name)
 		this.get(album.url).then(res => {
-			const pageUrls=this.parseAlbumSubPageUrls(res.text)
+			let pageUrls=this.parseAlbumSubPageUrls(res.text)
+			if(pageUrls.length===0){
+				pageUrls.push(album.url)
+			}
 			for(let pageUrl of pageUrls){
 				// console.log(">>>>",pageUrl)
 				this.handleOneAlbumPagePhotos(album.name,pageUrl)
