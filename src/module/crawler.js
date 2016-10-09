@@ -3,30 +3,20 @@ import req from 'superagent'
 import cheerio from 'cheerio'
 import fs from 'fs'
 import path from 'path'
+import Album from './album'
+import Photo from './photo'
 
 const albumListUrl = 'http://www.kaixin001.com/photo/albumlist.php'
 const domainName="http://www.kaixin001.com"
 const rootPhotoDir="开心网相册"
-
-class Album {
-	constructor(name, url) {
-		this.name = name
-		this.url = url
-	}
-}
-
-class Photo{
-	constructor(name, pageUrl){
-		this.name=name
-		this.pageUrl=pageUrl
-	}
-}
 
 class KaixinCrawler {
 
 	constructor() {
 		this.cookie=this.readCookie()
 		console.log(this.cookie);
+
+		this.albums=[]
 	}
 
 	readCookie(){
@@ -50,6 +40,93 @@ class KaixinCrawler {
 
 			}, err => console.error(err)
 			)
+	}
+
+	verify(){
+		console.log("deleting damaged files ...");
+		this.cleanDamagedFiles(rootPhotoDir)
+		
+		console.log("verify all photos are downloaded ...");
+
+		let promises=[]
+
+		this.get(albumListUrl)
+		.then(
+			res => {
+				let pageUrls = this.parseAlbumPageUrls(res.text)
+				//console.log(pageUrls);
+
+				for (let pageUrl of pageUrls) {
+					promises=promises.concat(this.verifyAlbumListPage(pageUrl))
+				}
+
+				Promise.all(promises).then(albums=>{
+					let allAlbums=[];
+
+					albums.forEach(x=>allAlbums=allAlbums.concat(x))
+
+					const actTotal=fs.readdirSync(rootPhotoDir).length;
+					if(actTotal !== allAlbums.length){
+						console.log(`Total count mismatch. expected:${allAlbums.length}, actual: ${actTotal}.`);
+					}
+
+					for(let album of allAlbums){
+						const albumPath=path.join(rootPhotoDir,album.name)
+						if(!fs.existsSync(albumPath)){
+							console.log(`Album not exists: ${album.name}`)
+						}else{
+							const actCount=fs.readdirSync(albumPath).length;
+							if(parseInt(album.count) !== actCount){
+								console.log(`File count mismatch(${album.name}). actual: ${actCount}, expected: ${album.count}.`)
+							}
+						}
+					}
+
+				}).catch(reason=>{
+					console.log(`${reason}`);
+				})
+
+
+			}, err => console.error(err)
+		)
+	}
+
+	verifyAlbumListPage(albumPageUrl) {
+
+		return this.get(albumPageUrl).then(res => {
+		    let promises=[]
+		    let albums=[]
+			const html = res.text
+			let $ = cheerio.load(html)
+			$('a[href^="http://www.kaixin001.com/photo/album.php?"]').each((idx, elem) => {
+				const albumLink = $(elem)
+
+				let albumName = albumLink.text()
+				let albumUrl = albumLink.attr('href')
+				let count= albumLink.next().text().match("\\(([0-9]+)\\)")[1]
+
+				if (albumName.endsWith("...")) {
+					let title
+					let p=this.get(albumUrl).then(res => {
+						let $ = cheerio.load(res.text)
+						$('.numBox').remove()
+						albumName = $("b[class=c6]").text()
+						return new Album(albumName, albumUrl, count)
+					})
+					promises.push(p)
+				} else {
+					promises.push(Promise.resolve(new Album(albumName, albumUrl, count)))
+				}
+
+			})
+
+			return Promise.all(promises).then(newAlbums=>{
+				albums=albums.concat(newAlbums);
+				return albums;
+			}).catch(reason=>{
+				console.log(`${reason}`);
+			})
+		})
 	}
 
 	parseAlbumPageUrls(html) {
@@ -105,25 +182,26 @@ class KaixinCrawler {
 	}
 
 	handleAlbum(album) {
-		console.log(album.name)
+		console.log(album.name, album.url)
 		this.get(album.url).then(res => {
 			let pageUrls=this.parseAlbumSubPageUrls(res.text)
 			if(pageUrls.length===0){
 				pageUrls.push(album.url)
 			}
 			for(let pageUrl of pageUrls){
-				// console.log(">>>>",pageUrl)
+				console.log(">>>>",pageUrl)
 				this.handleOneAlbumPagePhotos(album.name,pageUrl)
 			}
 		})
 	}
 
 	handleOneAlbumPagePhotos(albumName,pageUrl){
+		//console.log(">>>>",albumName, pageUrl)
 		this.get(pageUrl).then(res=>{
 			let $ = cheerio.load(res.text)
 			$('div[class=initimgName]').each((idx, elem) => {
 				const nameLink=$(elem).children()
-				const photoName=nameLink.attr('title')
+				let photoName=nameLink.attr('title')
 				const photoPageUrl=domainName+nameLink.attr('href')
 
 
@@ -133,9 +211,11 @@ class KaixinCrawler {
 				let path2=pid.substr(5,2)
 
 				let photoUrl=`http://p.kaixin001.com/privacy/photo/${path1}/${path2}/${uid}_${pid}_w1280p.jpg`
+
+				photoName=photoName+`_${pid}`
 				this.download(albumName,photoName,photoUrl)
 			})
-		})
+		},err=>console.error(err))
 
 	}
 
@@ -158,6 +238,8 @@ class KaixinCrawler {
 			let file=fs.createWriteStream(filePath);
 			this.reqGet(photoUrl).pipe(file)
 			console.log(`${filePath} is downloaded.`)
+		}else{
+			return
 		}
 		
 	}
@@ -189,5 +271,10 @@ class KaixinCrawler {
 
 }
 
-let kxCrawler = new KaixinCrawler()
-kxCrawler.start()
+// let kxCrawler = new KaixinCrawler()
+// kxCrawler.start()
+// let album=new Album("UK - Hursley (IBM Confidential)","http://www.kaixin001.com/photo/album.php?uid=2583910&albumid=29138143")
+// kxCrawler.handleAlbum(album)
+//kxCrawler.verify()
+
+export default KaixinCrawler

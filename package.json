@@ -4,7 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "start": "babel-node --presets es2015 src/index.js"
+    "downall": "babel-node --presets es2015 src/downall.js",
+    "downone": "babel-node --presets es2015 src/downone.js",
+    "verify": "babel-node --presets es2015 src/verify.js"
   },
   "author": "",
   "license": "ISC",
