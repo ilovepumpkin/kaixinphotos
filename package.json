@@ -4,9 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "downall": "babel-node --presets es2015 src/downall.js",
-    "downone": "babel-node --presets es2015 src/downone.js",
-    "verify": "babel-node --presets es2015 src/verify.js"
+    "downall": "babel-node src/downall.js",
+    "downone": "babel-node src/downone.js",
+    "verify": "babel-node src/verify.js"
   },
   "author": "",
   "license": "ISC",
@@ -14,6 +14,7 @@
     "babel-cli": "^6.16.0",
     "babel-core": "^6.17.0",
     "babel-preset-es2015": "^6.16.0",
+    "babel-preset-stage-0": "^6.16.0",
     "cheerio": "^0.22.0",
     "superagent": "^2.3.0"
   }

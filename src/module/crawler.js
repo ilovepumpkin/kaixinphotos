@@ -42,91 +42,66 @@ class KaixinCrawler {
 			)
 	}
 
-	verify(){
+	async verify(){
 		console.log("deleting damaged files ...");
 		this.cleanDamagedFiles(rootPhotoDir)
 		
 		console.log("verify all photos are downloaded ...");
 
-		let promises=[]
+		let allAlbums=await this.getAlbums()
 
-		this.get(albumListUrl)
-		.then(
-			res => {
-				let pageUrls = this.parseAlbumPageUrls(res.text)
-				//console.log(pageUrls);
+		const actTotal=fs.readdirSync(rootPhotoDir).length;
+		if(actTotal !== allAlbums.length){
+			console.log(`Total count mismatch. expected:${allAlbums.length}, actual: ${actTotal}.`);
+		}
 
-				for (let pageUrl of pageUrls) {
-					promises=promises.concat(this.verifyAlbumListPage(pageUrl))
+		for(let album of allAlbums){
+			const albumPath=path.join(rootPhotoDir,album.name)
+			if(!fs.existsSync(albumPath)){
+				console.log(`Album not exists: ${album.name}`)
+			}else{
+				const actCount=fs.readdirSync(albumPath).length;
+				if(parseInt(album.count) !== actCount){
+					console.log(`File count mismatch(${album.name}). actual: ${actCount}, expected: ${album.count}.`)
 				}
-
-				Promise.all(promises).then(albums=>{
-					let allAlbums=[];
-
-					albums.forEach(x=>allAlbums=allAlbums.concat(x))
-
-					const actTotal=fs.readdirSync(rootPhotoDir).length;
-					if(actTotal !== allAlbums.length){
-						console.log(`Total count mismatch. expected:${allAlbums.length}, actual: ${actTotal}.`);
-					}
-
-					for(let album of allAlbums){
-						const albumPath=path.join(rootPhotoDir,album.name)
-						if(!fs.existsSync(albumPath)){
-							console.log(`Album not exists: ${album.name}`)
-						}else{
-							const actCount=fs.readdirSync(albumPath).length;
-							if(parseInt(album.count) !== actCount){
-								console.log(`File count mismatch(${album.name}). actual: ${actCount}, expected: ${album.count}.`)
-							}
-						}
-					}
-
-				}).catch(reason=>{
-					console.log(`${reason}`);
-				})
-
-
-			}, err => console.error(err)
-		)
+			}
+		}				
 	}
 
-	verifyAlbumListPage(albumPageUrl) {
+	async getAlbumsPerPage(albumPageUrl) {
+		let res=await this.get(albumPageUrl)
 
-		return this.get(albumPageUrl).then(res => {
-		    let promises=[]
-		    let albums=[]
-			const html = res.text
-			let $ = cheerio.load(html)
-			$('a[href^="http://www.kaixin001.com/photo/album.php?"]').each((idx, elem) => {
-				const albumLink = $(elem)
+		let $ = cheerio.load(res.text)
+		let promises=$('a[href^="http://www.kaixin001.com/photo/album.php?"]').map(async (idx, elem) => {
+			const albumLink = $(elem)
 
-				let albumName = albumLink.text()
-				let albumUrl = albumLink.attr('href')
-				let count= albumLink.next().text().match("\\(([0-9]+)\\)")[1]
+			let albumName = albumLink.text()
+			let albumUrl = albumLink.attr('href')
+			let count= albumLink.next().text().match("\\(([0-9]+)\\)")[1]
 
-				if (albumName.endsWith("...")) {
-					let title
-					let p=this.get(albumUrl).then(res => {
-						let $ = cheerio.load(res.text)
-						$('.numBox').remove()
-						albumName = $("b[class=c6]").text()
-						return new Album(albumName, albumUrl, count)
-					})
-					promises.push(p)
-				} else {
-					promises.push(Promise.resolve(new Album(albumName, albumUrl, count)))
-				}
+            if (albumName.endsWith("...")) {
+				let res=await this.get(albumUrl)
+				let $ = cheerio.load(res.text)
+				$('.numBox').remove()
+				albumName = $("b[class=c6]").text()
+			}
+			return new Album(albumName, albumUrl, count)
+		}).get()
 
-			})
+		return await Promise.all(promises)
+	}
 
-			return Promise.all(promises).then(newAlbums=>{
-				albums=albums.concat(newAlbums);
-				return albums;
-			}).catch(reason=>{
-				console.log(`${reason}`);
-			})
-		})
+	async getAlbums(){
+		let albums=[]
+		let res=await this.get(albumListUrl)
+		let pageUrls = this.parseAlbumPageUrls(res.text)
+
+		for (let pageUrl of pageUrls) {
+			let albumsPerPage=await this.getAlbumsPerPage(pageUrl)
+			albums=albums.concat(albumsPerPage)
+		}
+
+		return albums
 	}
 
 	parseAlbumPageUrls(html) {
@@ -189,7 +164,7 @@ class KaixinCrawler {
 				pageUrls.push(album.url)
 			}
 			for(let pageUrl of pageUrls){
-				console.log(">>>>",pageUrl)
+				//console.log(">>>>",pageUrl)
 				this.handleOneAlbumPagePhotos(album.name,pageUrl)
 			}
 		})
