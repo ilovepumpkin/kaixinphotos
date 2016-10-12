@@ -6,30 +6,51 @@ import path from 'path'
 import Album from './album'
 import Photo from './photo'
 
-const albumListUrl = 'http://www.kaixin001.com/photo/albumlist.php'
 const domainName="http://www.kaixin001.com"
-const rootPhotoDir="开心网相册"
+
 const albumListFile="albums.json"
 
 class KaixinCrawler {
 
-	constructor() {
+    constructor(uid) {
 		this.cookie=this.readCookie()
 		//console.log(this.cookie);
 
 		this.albums=[]
+
+		this.albumListUrl = 'http://www.kaixin001.com/photo/albumlist.php'
+		this.rootPhotoDir="开心网相册"
+		if(uid){
+			this.albumListUrl=this.albumListUrl+"?uid="+uid
+		}
+	}
+
+	async updateRootPhotoDir(){
+		const userName=await this.fetchUsername()
+		this.rootPhotoDir=this.rootPhotoDir+"("+userName+")"
+		if(!fs.existsSync(this.rootPhotoDir)){
+			fs.mkdirSync(this.rootPhotoDir);
+		}
+	}
+
+	async fetchUsername(){
+		let res=await this.get(this.albumListUrl)	
+		let $ = cheerio.load(res.text)
+		return $("b[class=c3]").first().text()
 	}
 
 	readCookie(){
 		return fs.readFileSync('cookie',{encoding:'utf8',flag:'r'});
 	}
 
-	start() {
+	async start() {
+		await this.updateRootPhotoDir()
+
 		console.log("deleting damaged files ...");
-		this.cleanDamagedFiles(rootPhotoDir)
+		this.cleanDamagedFiles(this.rootPhotoDir)
 
 		console.log("fetching photos...");
-		this.get(albumListUrl)
+		this.get(this.albumListUrl)
 		.then(
 			res => {
 				let pageUrls = this.parseAlbumPageUrls(res.text)
@@ -44,21 +65,23 @@ class KaixinCrawler {
 	}
 
 	async verify(){
+		await this.updateRootPhotoDir()
+
 		console.log("deleting damaged files ...");
-		this.cleanDamagedFiles(rootPhotoDir)
+		this.cleanDamagedFiles(this.rootPhotoDir)
 		
 		console.log("verify all photos are downloaded ...");
 
 		let allAlbums=await this.getAlbums()
 
-		const actTotal=fs.readdirSync(rootPhotoDir).length;
+		const actTotal=fs.readdirSync(this.rootPhotoDir).length;
 		if(actTotal !== allAlbums.length){
 			console.log(`Total count mismatch. expected:${allAlbums.length}, actual: ${actTotal}.`);
 		}
 
 		let success=true
 		for(let album of allAlbums){
-			const albumPath=path.join(rootPhotoDir,album.name)
+			const albumPath=path.join(this.rootPhotoDir,album.name)
 			if(!fs.existsSync(albumPath)){
 				console.log(`Album not exists: ${album.name}`)
 				success=false
@@ -106,7 +129,7 @@ class KaixinCrawler {
 		}
 
 		let albums=[]
-		let res=await this.get(albumListUrl)
+		let res=await this.get(this.albumListUrl)
 		let pageUrls = this.parseAlbumPageUrls(res.text)
 
 		for (let pageUrl of pageUrls) {
@@ -129,9 +152,13 @@ class KaixinCrawler {
 			if (idx > 0) {
 				pageUrls.push(domainName + $(elem).attr('href'))
 			} else {
-				pageUrls.push(albumListUrl)
+				pageUrls.push(this.albumListUrl)
 			}
 		})
+
+		if(pageUrls.length === 0){
+			pageUrls.push(this.albumListUrl)
+		}
 		return pageUrls
 	}
 
@@ -176,6 +203,8 @@ class KaixinCrawler {
 	}
 
 	async downAlbum(name){
+		await this.updateRootPhotoDir()
+		
 		if(!fs.existsSync(albumListFile)){
 			console.error(`${albumListFile} not found.`);
 			process.exit()
@@ -230,17 +259,17 @@ class KaixinCrawler {
 	download(albumName,photoName,photoUrl){
 		//console.log("^^^^[download]",albumName,photoName,photoUrl)
 
-		if(!fs.existsSync(rootPhotoDir)){
+		if(!fs.existsSync(this.rootPhotoDir)){
 			fs.mkdirSync(rootPhotoDir);
 		}
 
-		const albumPath=path.join(rootPhotoDir,albumName);
+		const albumPath=path.join(this.rootPhotoDir,albumName);
 
 		if(!fs.existsSync(albumPath)){
 			fs.mkdirSync(albumPath);
 		}
 
-		const filePath=`${rootPhotoDir}/${albumName}/${photoName}.jpg`
+		const filePath=`${this.rootPhotoDir}/${albumName}/${photoName}.jpg`
 
 		if(!fs.existsSync(filePath)){
 			let file=fs.createWriteStream(filePath);
