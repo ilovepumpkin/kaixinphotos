@@ -9,12 +9,13 @@ import Photo from './photo'
 const albumListUrl = 'http://www.kaixin001.com/photo/albumlist.php'
 const domainName="http://www.kaixin001.com"
 const rootPhotoDir="开心网相册"
+const albumListFile="albums.json"
 
 class KaixinCrawler {
 
 	constructor() {
 		this.cookie=this.readCookie()
-		console.log(this.cookie);
+		//console.log(this.cookie);
 
 		this.albums=[]
 	}
@@ -55,17 +56,24 @@ class KaixinCrawler {
 			console.log(`Total count mismatch. expected:${allAlbums.length}, actual: ${actTotal}.`);
 		}
 
+		let success=true
 		for(let album of allAlbums){
 			const albumPath=path.join(rootPhotoDir,album.name)
 			if(!fs.existsSync(albumPath)){
 				console.log(`Album not exists: ${album.name}`)
+				success=false
 			}else{
 				const actCount=fs.readdirSync(albumPath).length;
 				if(parseInt(album.count) !== actCount){
 					console.log(`File count mismatch(${album.name}). actual: ${actCount}, expected: ${album.count}.`)
+					success=false
 				}
 			}
 		}				
+
+		if(success){
+			console.info("Congratulations!! - all photos are downloaded.");
+		}
 	}
 
 	async getAlbumsPerPage(albumPageUrl) {
@@ -92,6 +100,11 @@ class KaixinCrawler {
 	}
 
 	async getAlbums(){
+		if(fs.existsSync(albumListFile)){
+			console.log(`${albumListFile} is found - load albums from it.`);
+			return JSON.parse(fs.readFileSync(albumListFile))
+		}
+
 		let albums=[]
 		let res=await this.get(albumListUrl)
 		let pageUrls = this.parseAlbumPageUrls(res.text)
@@ -99,6 +112,11 @@ class KaixinCrawler {
 		for (let pageUrl of pageUrls) {
 			let albumsPerPage=await this.getAlbumsPerPage(pageUrl)
 			albums=albums.concat(albumsPerPage)
+		}
+
+		if(!fs.existsSync(albumListFile)){
+			console.log(`Saved album data to ${albumListFile}.`);
+			fs.writeFileSync(albumListFile, JSON.stringify(albums));
 		}
 
 		return albums
@@ -139,6 +157,7 @@ class KaixinCrawler {
 
 				let albumName = albumLink.text()
 				let albumUrl = albumLink.attr('href')
+				let count= albumLink.next().text().match("\\(([0-9]+)\\)")[1]
 
 				if (albumName.endsWith("...")) {
 					let title
@@ -146,28 +165,42 @@ class KaixinCrawler {
 						let $ = cheerio.load(res.text)
 						$('.numBox').remove()
 						albumName = $("b[class=c6]").text()
-						this.handleAlbum(new Album(albumName, albumUrl))
+						this.handleAlbum(new Album(albumName, albumUrl,count))
 					})
 				} else {
-					this.handleAlbum(new Album(albumName, albumUrl))
+					this.handleAlbum(new Album(albumName, albumUrl,count))
 				}
 
 			})
 		})
 	}
 
+	async downAlbum(name){
+		if(!fs.existsSync(albumListFile)){
+			console.error(`${albumListFile} not found.`);
+			process.exit()
+		}
+
+		const albums=await this.getAlbums()
+		const filtered=albums.filter(x=>x.name === name)
+		if(filtered.length === 0){
+			console.error(`Wrong album name - ${name}`);
+			process.exit()
+		}
+		const album=filtered[0]
+		this.handleAlbum(album)
+	}
+
 	handleAlbum(album) {
-		console.log(album.name, album.url)
-		this.get(album.url).then(res => {
-			let pageUrls=this.parseAlbumSubPageUrls(res.text)
-			if(pageUrls.length===0){
-				pageUrls.push(album.url)
-			}
-			for(let pageUrl of pageUrls){
-				//console.log(">>>>",pageUrl)
-				this.handleOneAlbumPagePhotos(album.name,pageUrl)
-			}
-		})
+		console.log(album.name, album.url, album.count)
+
+		const pageCount=Math.ceil(album.count/18)
+
+		for (var i = 0; i < pageCount; i++) {
+			const pageUrl=album.url+"&start="+(i*18)
+			this.handleOneAlbumPagePhotos(album.name,pageUrl)
+		}
+
 	}
 
 	handleOneAlbumPagePhotos(albumName,pageUrl){
